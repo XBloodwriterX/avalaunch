@@ -1,11 +1,14 @@
 # Rust
 /target/
+/.cargo/
+vendor/
 *.rs.bk
 
 # Node.js
 node_modules/
 dist/
 .output/
+.npm-cache/
 
 # Tauri
 /src-tauri/target/
