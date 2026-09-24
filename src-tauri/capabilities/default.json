@@ -7,6 +7,10 @@
   ],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "shell:default",
+    "window-state:default",
+    "notification:default",
+    "global-shortcut:default"
   ]
 }
