@@ -16,6 +16,7 @@ This is the entry point for all project documentation. Use this file to navigate
 |----------|---------| 
 | [`shield-engine.md`](./shield-engine.md) | Ad-blocking engine integration details & concurrency model |
 | [`platform-interception.md`](./platform-interception.md) | Platform-specific request interception architecture |
+| [`network-interception.md`](./network-interception.md) | Frontend & client API request interception, monkey-patching, and decision caching |
 | [`filter-lists.md`](./filter-lists.md) | Filter list management, caching, and update lifecycle |
 | [`frontend-injector.md`](./frontend-injector.md) | Frontend cosmetic filtering, MutationObserver, scriptlets & SPA tracking |
 | [`configuration.md`](./configuration.md) | App configuration schema, options, and defaults |
