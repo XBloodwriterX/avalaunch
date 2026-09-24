@@ -1,5 +1,40 @@
 [Adblock Plus 2.0]
-! Title: EasyList (Bundled Stub)
+! Title: EasyList (Bundled Core Rules)
 ! Homepage: https://easylist.to/
+! Expires: 7 days
+
+! --- General ad server network rules ---
 ||googleads.g.doubleclick.net^$third-party
 ||pagead2.googlesyndication.com^$third-party
+||pubads.g.doubleclick.net^$third-party
+||securepubads.g.doubleclick.net^$third-party
+||adservice.google.com^$third-party
+||static.doubleclick.net^
+||adclick.g.doubleclick.net^
+||ads.youtube.com^
+
+! --- YouTube & YouTube Music ad network rules ---
+||youtube.com/api/stats/ads^
+||youtube.com/pagead/*
+||youtube.com/ptracking*
+||youtube.com/api/stats/qoe?*adformat=
+||youtube.com/get_midroll_info?
+||youtube.com/api/stats/playback?*adformat=
+
+! --- YouTube Music cosmetic hiding rules ---
+music.youtube.com##ytmusic-mealbar-promo-renderer
+music.youtube.com##.ytmusic-mealbar-promo-renderer
+music.youtube.com##ytmusic-upsell-dialog-renderer
+music.youtube.com##.ytmusic-upsell-dialog-renderer
+music.youtube.com##ytmusic-player-bar-promo-renderer
+music.youtube.com##.badge-style-type-ad
+music.youtube.com##ytd-promoted-sparkles-web-renderer
+music.youtube.com##.ytd-in-feed-ad-layout-renderer
+music.youtube.com###player-ads
+music.youtube.com##.ytp-ad-module
+music.youtube.com##.ytp-ad-overlay-container
+music.youtube.com##.ytp-ad-text
+music.youtube.com##.ytp-ad-preview-container
+music.youtube.com###masthead-ad
+music.youtube.com##.video-ads
+music.youtube.com##ytmusic-pivot-bar-item-renderer[tab-id="FEmusic_premium"]
