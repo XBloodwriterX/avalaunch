@@ -1,0 +1,45 @@
+# Rust
+/target/
+*.rs.bk
+
+# Node.js
+node_modules/
+dist/
+.output/
+
+# Tauri
+/src-tauri/target/
+/src-tauri/WixTools/
+/src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Build artifacts
+*.deb
+*.rpm
+*.AppImage
+*.dmg
+*.msi
+*.exe
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Adblock engine cache
+adblock_cache.dat
+filter_lists/
+
+# Agent state (managed by dsh)
+.agent-teams/
