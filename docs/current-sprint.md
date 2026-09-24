@@ -8,12 +8,7 @@
 
 ## Active Tasks
 
-| # | Task | Assignee | Status | Notes |
-|---|------|----------|--------|-------|
-| 3 | Implement Webview Bridge & IPC commands | bridge-dev | 🔄 In Progress | Commands, request interception, lib.rs wiring |
-| 5 | Implement Configuration System | bridge-dev | 🔄 In Progress | avalaunch.json parsing, state store |
-| 6 | Wire integration & build | bridge-dev / coordinator | 🔄 In Progress | Connect all components |
-| 7 | Test-drive music.youtube.com | coordinator | ⏳ Blocked on #6 | Package and validate |
+*(All tasks completed for Sprint 1)*
 
 ## Completed Tasks
 
@@ -21,13 +16,19 @@
 |---|------|----------|--------|-------|
 | 1 | Scaffold Tauri v2 project structure | scaffolder | ✅ Completed | Cargo workspace, tauri.conf.json, avalaunch.json, capabilities, resources, package.json, TypeScript + Vite, module stubs |
 | 2 | Implement Shield Engine | shield-dev | ✅ Completed | adblock-rust 0.13.3 integration, Send+Sync Arc engine, filter list cache, cosmetic extraction, 12 unit tests passing |
-| 4 | Implement Frontend Injector | frontend-dev | ✅ Completed | MutationObserver dynamic hiding, requestAnimationFrame batching, scriptlet execution, tests passing |
+| 3 | Implement Webview Bridge & IPC commands | bridge-dev | ✅ Completed | 5 Tauri IPC commands, state management, window lifecycle, initialization script injection |
+| 4 | Implement Frontend Injector | frontend-dev | ✅ Completed | MutationObserver dynamic hiding, requestAnimationFrame batching, scriptlet execution, unit tests passing |
+| 5 | Implement Configuration System | bridge-dev | ✅ Completed | avalaunch.json schema parsing, multi-candidate path loader, graceful defaults |
+| 6 | Wire integration & build | bridge-dev / coordinator | ✅ Completed | Clean release build produced `target/release/avalaunch` (24MB) |
+| 7 | Test-drive music.youtube.com | coordinator | ✅ Completed | Verified YouTube Music ad blocking & audio stream playback via integration test suite |
 
 ## Key Decisions This Sprint
 
-- Using tauri-cli 2.5.0 (installed), Rust 1.97.1, Node v26.8.2
-- adblock crate 0.13.3 confirmed as latest stable
-- Tauri v2 stable line (not v3 alpha)
+- Using tauri-cli 2.5.0, Rust 1.97.1 (edition 2024), Node v26.8.2
+- adblock crate 0.13.3 with `embedded-domain-resolver` and `full-regex-handling`
+- Thread-safe `Arc<ShieldEngine>` with `parking_lot::RwLock` for zero-cost concurrent webview request evaluation
+- Bundled core rules for YouTube Music ad and tracker blocking in `resources/easylist.txt` and `resources/easyprivacy.txt`
+- Compiled cosmetic filtering JS bundle embedded and injected directly via Tauri `initialization_script`
 
 ## Blockers
 

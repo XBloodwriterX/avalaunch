@@ -14,13 +14,10 @@ This is the entry point for all project documentation. Use this file to navigate
 
 | Document | Purpose |
 |----------|---------| 
-| *(To be created as components are implemented)* | |
-
-Planned documents:
-- `shield-engine.md` — Ad-blocking engine integration details
-- `platform-interception.md` — Platform-specific request interception
-- `filter-lists.md` — Filter list management and updates
-- `configuration.md` — App configuration schema and options
+| [`shield-engine.md`](./shield-engine.md) | Ad-blocking engine integration details & concurrency model |
+| [`platform-interception.md`](./platform-interception.md) | Platform-specific request interception architecture |
+| [`filter-lists.md`](./filter-lists.md) | Filter list management, caching, and update lifecycle |
+| [`configuration.md`](./configuration.md) | App configuration schema, options, and defaults |
 
 ## Decision Log
 
