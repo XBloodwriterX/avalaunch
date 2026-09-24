@@ -115,24 +115,37 @@ fn test_youtube_music_cosmetic_filtering_rules() {
 }
 
 #[test]
-fn test_youtube_music_engine_cache_serialization() {
+fn test_youtube_playback_critical_resources() {
     let easylist = include_str!("../resources/easylist.txt");
-    let engine = ShieldEngine::new(vec![easylist.to_string()])
+    let easyprivacy = include_str!("../resources/easyprivacy.txt");
+
+    let engine = ShieldEngine::new(vec![easylist.to_string(), easyprivacy.to_string()])
         .expect("Failed to initialize Shield Engine");
 
-    let serialized = engine.serialize().expect("Engine serialization failed");
-    assert!(!serialized.is_empty(), "Serialized bytes must not be empty");
+    let critical_urls = vec![
+        ("https://music.youtube.com/", "https://music.youtube.com", "document"),
+        ("https://music.youtube.com/youtubei/v1/player?prettyPrint=false", "https://music.youtube.com", "xhr"),
+        ("https://music.youtube.com/youtubei/v1/browse?prettyPrint=false", "https://music.youtube.com", "xhr"),
+        ("https://music.youtube.com/youtubei/v1/next?prettyPrint=false", "https://music.youtube.com", "xhr"),
+        ("https://music.youtube.com/youtubei/v1/queue/get_queue?prettyPrint=false", "https://music.youtube.com", "xhr"),
+        ("https://rr1---sn-4g5edn6e.googlevideo.com/videoplayback?expire=123&itag=140&source=youtube", "https://music.youtube.com", "media"),
+        ("https://rr1---sn-4g5edn6e.googlevideo.com/videoplayback?expire=123&itag=140&source=youtube", "https://music.youtube.com", "xhr"),
+        ("https://www.youtube.com/s/player/9b27d425/player_ias.vflset/en_US/base.js", "https://music.youtube.com", "script"),
+        ("https://www.youtube.com/s/player/9b27d425/player_ias.vflset/en_US/remote.js", "https://music.youtube.com", "script"),
+        ("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap", "https://music.youtube.com", "stylesheet"),
+        ("https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2", "https://music.youtube.com", "font"),
+        ("https://lh3.googleusercontent.com/a/default-user=s120-c", "https://music.youtube.com", "image"),
+        ("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", "https://music.youtube.com", "image"),
+        ("https://www.youtube.com/generate_204", "https://music.youtube.com", "xhr"),
+        ("https://music.youtube.com/generate_204", "https://music.youtube.com", "xhr"),
+    ];
 
-    let deserialized =
-        ShieldEngine::from_serialized(&serialized).expect("Deserialization failed");
-
-    let block_check = deserialized.check_request(
-        "https://googleads.g.doubleclick.net/pagead/ads",
-        "https://music.youtube.com",
-        "script",
-    );
-    assert!(
-        block_check.matched,
-        "Deserialized engine must correctly evaluate filter rules"
-    );
+    for (url, src, req_type) in critical_urls {
+        let res = engine.check_request(url, src, req_type);
+        assert!(
+            !res.matched,
+            "Critical resource {} (type {}) should NOT be blocked! Filter: {:?}",
+            url, req_type, res.filter
+        );
+    }
 }

@@ -5,6 +5,7 @@
  * - window.XMLHttpRequest
  * - navigator.sendBeacon
  * - DOM element creation (script, iframe, img src properties)
+ * - YouTube player ad-placement stripping & video ad skipping
  * - window.open popups
  */
 
@@ -13,7 +14,6 @@ import { invokeIPC } from "./cosmetic-injector.ts";
 
 /**
  * Common ad and tracking URL patterns for instantaneous synchronous matching.
- * Populated dynamically with results from the Shield Engine.
  */
 const KNOWN_BLOCKED_HOST_PATTERNS = [
   "doubleclick.net",
@@ -21,8 +21,6 @@ const KNOWN_BLOCKED_HOST_PATTERNS = [
   "adservice.google.com",
   "google-analytics.com",
   "googlesyndication.com",
-  "/api/stats/ads",
-  "/pagead/",
   "pagead2.googlesyndication.com",
   "ad.doubleclick.net",
   "static.doubleclick.net",
@@ -32,19 +30,77 @@ const KNOWN_BLOCKED_HOST_PATTERNS = [
   "taboola.com",
   "outbrain.com",
   "scorecardresearch.com",
+  "/api/stats/ads",
+  "/pagead/",
+];
+
+/**
+ * Known legitimate media & API host patterns that must NEVER be blocked or delayed.
+ */
+const KNOWN_ALLOWED_HOST_PATTERNS = [
+  "googlevideo.com",
+  "music.youtube.com/youtubei/v1/",
+  "www.youtube.com/youtubei/v1/",
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+  "ytimg.com",
+  "googleusercontent.com",
+  "play.google.com/music",
 ];
 
 const BLOCKED_IMAGE_1X1 = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const BLOCKED_SCRIPT_EMPTY = "data:text/javascript;charset=utf-8,/* blocked by avalaunch */";
 const BLOCKED_FRAME_EMPTY = "about:blank";
 
+/**
+ * Strips ad placements, video ads, and ad slots from YouTube player JSON responses.
+ */
+export function cleanYouTubePlayerResponse(data: any): boolean {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+
+  let modified = false;
+
+  if ("adPlacements" in data) {
+    delete data.adPlacements;
+    modified = true;
+  }
+  if ("playerAds" in data) {
+    delete data.playerAds;
+    modified = true;
+  }
+  if ("adSlots" in data) {
+    delete data.adSlots;
+    modified = true;
+  }
+  if ("adBreakHeartbeatParams" in data) {
+    delete data.adBreakHeartbeatParams;
+    modified = true;
+  }
+
+  if (data.playbackTracking && typeof data.playbackTracking === "object") {
+    const pt = data.playbackTracking;
+    if (pt.videostatsPlaybackUrl && pt.videostatsPlaybackUrl.baseUrl && pt.videostatsPlaybackUrl.baseUrl.includes("adformat=")) {
+      delete pt.videostatsPlaybackUrl;
+      modified = true;
+    }
+    if (pt.ptrackingUrl) {
+      delete pt.ptrackingUrl;
+      modified = true;
+    }
+  }
+
+  return modified;
+}
+
 export class NetworkInterceptor {
   private originalFetch: typeof window.fetch | null = null;
   private originalXhrOpen: typeof XMLHttpRequest.prototype.open | null = null;
   private originalXhrSend: typeof XMLHttpRequest.prototype.send | null = null;
   private originalSendBeacon: typeof navigator.sendBeacon | null = null;
-  private originalCreateElement: typeof document.createElement | null = null;
   private originalWindowOpen: typeof window.open | null = null;
+  private adSkipperInterval: number | null = null;
 
   private cache: Map<string, BlockResult> = new Map();
   private maxCacheSize: number = 2000;
@@ -58,8 +114,14 @@ export class NetworkInterceptor {
       return false;
     }
 
-    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
+    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:") || url.startsWith("mediasource:")) {
       return false;
+    }
+
+    for (const allowed of KNOWN_ALLOWED_HOST_PATTERNS) {
+      if (url.includes(allowed)) {
+        return false;
+      }
     }
 
     const cached = this.cache.get(url);
@@ -70,6 +132,27 @@ export class NetworkInterceptor {
     for (const pattern of KNOWN_BLOCKED_HOST_PATTERNS) {
       if (url.includes(pattern)) {
         this.cache.set(url, { matched: true, filter: pattern, redirect_url: null });
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check whether a URL is explicitly allowed for playback / media.
+   */
+  public isUrlAllowedSync(url: string): boolean {
+    if (!url || typeof url !== "string") {
+      return true;
+    }
+
+    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:") || url.startsWith("mediasource:")) {
+      return true;
+    }
+
+    for (const allowed of KNOWN_ALLOWED_HOST_PATTERNS) {
+      if (url.includes(allowed)) {
         return true;
       }
     }
@@ -90,7 +173,7 @@ export class NetworkInterceptor {
       return { matched: false };
     }
 
-    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
+    if (this.isUrlAllowedSync(url)) {
       return { matched: false };
     }
 
@@ -153,8 +236,9 @@ export class NetworkInterceptor {
     this.hookFetch();
     this.hookXHR();
     this.hookSendBeacon();
-    this.hookDOMCreation();
+    this.hookDOMPrototypes();
     this.hookWindowOpen();
+    this.startAdSkipper();
   }
 
   /**
@@ -182,14 +266,14 @@ export class NetworkInterceptor {
       this.originalSendBeacon = null;
     }
 
-    if (this.originalCreateElement && typeof document !== "undefined") {
-      document.createElement = this.originalCreateElement;
-      this.originalCreateElement = null;
-    }
-
     if (this.originalWindowOpen) {
       window.open = this.originalWindowOpen;
       this.originalWindowOpen = null;
+    }
+
+    if (this.adSkipperInterval !== null) {
+      clearInterval(this.adSkipperInterval);
+      this.adSkipperInterval = null;
     }
 
     this.cache.clear();
@@ -236,21 +320,59 @@ export class NetworkInterceptor {
     window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const urlStr = self.resolveUrl(input);
 
-      // Fast synchronous check
+      // Fast check: Blocked ad URL
       if (self.isUrlBlockedSync(urlStr)) {
         return new Response(null, { status: 204, statusText: "No Content" });
       }
 
-      // Asynchronous Shield Engine check
+      // Fast check: Allowed media / stream / API URL
+      if (self.isUrlAllowedSync(urlStr)) {
+        const res = init ? await orig(input, init) : await orig(input);
+
+        // Intercept YouTube player responses to strip ads
+        if (urlStr.includes("/youtubei/v1/player")) {
+          try {
+            const clone = res.clone();
+            const data = await clone.json();
+            if (cleanYouTubePlayerResponse(data)) {
+              return new Response(JSON.stringify(data), {
+                status: res.status,
+                statusText: res.statusText,
+                headers: res.headers,
+              });
+            }
+          } catch {}
+        }
+
+        return res;
+      }
+
+      // Asynchronous Shield Engine check for other domains
       const blockResult = await self.checkUrl(urlStr, window.location.href, "xmlhttprequest");
       if (blockResult.matched) {
         if (blockResult.redirect_url) {
-          return orig(blockResult.redirect_url, init);
+          return init ? orig(blockResult.redirect_url, init) : orig(blockResult.redirect_url);
         }
         return new Response(null, { status: 204, statusText: "No Content" });
       }
 
-      return orig(input, init);
+      const finalRes = init ? await orig(input, init) : await orig(input);
+
+      if (urlStr.includes("/youtubei/v1/player")) {
+        try {
+          const clone = finalRes.clone();
+          const data = await clone.json();
+          if (cleanYouTubePlayerResponse(data)) {
+            return new Response(JSON.stringify(data), {
+              status: finalRes.status,
+              statusText: finalRes.statusText,
+              headers: finalRes.headers,
+            });
+          }
+        } catch {}
+      }
+
+      return finalRes;
     };
   }
 
@@ -265,7 +387,11 @@ export class NetworkInterceptor {
     const origSend = this.originalXhrSend;
 
     XMLHttpRequest.prototype.open = function (
-      this: XMLHttpRequest & { __avalaunch_url?: string; __avalaunch_blocked?: boolean },
+      this: XMLHttpRequest & {
+        __avalaunch_url?: string;
+        __avalaunch_blocked?: boolean;
+        __avalaunch_clean_player?: boolean;
+      },
       method: string,
       url: string | URL,
       ...rest: any[]
@@ -278,18 +404,23 @@ export class NetworkInterceptor {
         return (origOpen as any).apply(this, [method, "data:text/plain;charset=utf-8,", ...rest]);
       }
 
-      // Check asynchronously in background to prime cache
-      self.checkUrl(urlStr, window.location.href, "xmlhttprequest").catch(() => {});
+      if (urlStr.includes("/youtubei/v1/player")) {
+        this.__avalaunch_clean_player = true;
+      }
 
       return (origOpen as any).apply(this, [method, url, ...rest]);
     };
 
     XMLHttpRequest.prototype.send = function (
-      this: XMLHttpRequest & { __avalaunch_url?: string; __avalaunch_blocked?: boolean },
+      this: XMLHttpRequest & {
+        __avalaunch_url?: string;
+        __avalaunch_blocked?: boolean;
+        __avalaunch_clean_player?: boolean;
+        __avalaunch_cleaned_text?: string;
+      },
       body?: any
     ) {
       if (this.__avalaunch_blocked || (this.__avalaunch_url && self.isUrlBlockedSync(this.__avalaunch_url))) {
-        // Fast abort / simulate immediate empty response
         try {
           Object.defineProperty(this, "status", { value: 204, writable: true });
           Object.defineProperty(this, "statusText", { value: "No Content", writable: true });
@@ -304,6 +435,21 @@ export class NetworkInterceptor {
           this.dispatchEvent(new Event("loadend"));
         }, 0);
         return;
+      }
+
+      if (this.__avalaunch_clean_player) {
+        this.addEventListener("load", function () {
+          try {
+            if (this.responseText) {
+              const data = JSON.parse(this.responseText);
+              if (cleanYouTubePlayerResponse(data)) {
+                const cleaned = JSON.stringify(data);
+                Object.defineProperty(this, "responseText", { value: cleaned, configurable: true });
+                Object.defineProperty(this, "response", { value: cleaned, configurable: true });
+              }
+            }
+          } catch {}
+        });
       }
 
       return origSend.call(this, body);
@@ -323,104 +469,62 @@ export class NetworkInterceptor {
         return true; // Pretend it succeeded
       }
 
-      self.checkUrl(urlStr, window.location.href, "ping").catch(() => {});
       return orig(url, data);
     };
   }
 
-  private hookDOMCreation(): void {
-    if (typeof document === "undefined" || typeof document.createElement !== "function") return;
-
-    this.originalCreateElement = document.createElement.bind(document);
+  /**
+   * Hooks prototype setters on HTMLScriptElement, HTMLIFrameElement, and HTMLImageElement
+   * without polluting element instances or breaking standard DOM reflection.
+   */
+  private hookDOMPrototypes(): void {
+    if (typeof window === "undefined") return;
     const self = this;
-    const orig = this.originalCreateElement;
 
-    document.createElement = function <K extends keyof HTMLElementTagNameMap>(
-      tagName: K,
-      options?: ElementCreationOptions
-    ): HTMLElementTagNameMap[K] {
-      const el = orig(tagName, options);
-      const tagLower = String(tagName).toLowerCase();
+    const hookPrototypeSrc = (proto: any, tag: string) => {
+      if (!proto) return;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, "src");
+      if (!descriptor || !descriptor.set || !descriptor.get) return;
 
-      if (tagLower === "script" || tagLower === "iframe" || tagLower === "img") {
-        self.interceptSrcProperty(el, tagLower);
-      }
+      const origSet = descriptor.set;
+      const origGet = descriptor.get;
 
-      return el;
+      Object.defineProperty(proto, "src", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return origGet.call(this);
+        },
+        set(val: string) {
+          const resolved = self.resolveUrl(val);
+          if (self.isUrlBlockedSync(resolved)) {
+            this.setAttribute("data-shield-blocked", "true");
+            if (tag === "script") {
+              return origSet.call(this, BLOCKED_SCRIPT_EMPTY);
+            }
+            if (tag === "iframe") {
+              this.style.display = "none";
+              return origSet.call(this, BLOCKED_FRAME_EMPTY);
+            }
+            if (tag === "img") {
+              this.style.display = "none";
+              return origSet.call(this, BLOCKED_IMAGE_1X1);
+            }
+          }
+          return origSet.call(this, val);
+        },
+      });
     };
-  }
 
-  public interceptSrcProperty(el: HTMLElement, tagLower: string): void {
-    let currentSrc = "";
-    const self = this;
-
-    const descriptor = Object.getOwnPropertyDescriptor(
-      tagLower === "script"
-        ? HTMLScriptElement.prototype
-        : tagLower === "iframe"
-        ? HTMLIFrameElement.prototype
-        : HTMLImageElement.prototype,
-      "src"
-    );
-
-    Object.defineProperty(el, "src", {
-      configurable: true,
-      enumerable: true,
-      get() {
-        if (descriptor && descriptor.get) {
-          return descriptor.get.call(this);
-        }
-        return currentSrc;
-      },
-      set(val: string) {
-        const resolved = self.resolveUrl(val);
-
-        if (self.isUrlBlockedSync(resolved)) {
-          el.setAttribute("data-shield-blocked", "true");
-          if (tagLower === "script") {
-            currentSrc = BLOCKED_SCRIPT_EMPTY;
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(this, BLOCKED_SCRIPT_EMPTY);
-            }
-            return;
-          }
-          if (tagLower === "iframe") {
-            currentSrc = BLOCKED_FRAME_EMPTY;
-            el.style.display = "none";
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(this, BLOCKED_FRAME_EMPTY);
-            }
-            return;
-          }
-          if (tagLower === "img") {
-            currentSrc = BLOCKED_IMAGE_1X1;
-            el.style.display = "none";
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(this, BLOCKED_IMAGE_1X1);
-            }
-            return;
-          }
-        }
-
-        currentSrc = val;
-        if (descriptor && descriptor.set) {
-          descriptor.set.call(this, val);
-        } else {
-          el.setAttribute("src", val);
-        }
-
-        // Asynchronously check against Shield Engine to learn new rules
-        self.checkUrl(resolved, window.location.href, tagLower).then((res) => {
-          if (res.matched) {
-            el.setAttribute("data-shield-blocked", "true");
-            el.style.display = "none";
-            if (tagLower === "script" && el.parentNode) {
-              el.parentNode.removeChild(el);
-            }
-          }
-        });
-      },
-    });
+    if (typeof HTMLScriptElement !== "undefined") {
+      hookPrototypeSrc(HTMLScriptElement.prototype, "script");
+    }
+    if (typeof HTMLIFrameElement !== "undefined") {
+      hookPrototypeSrc(HTMLIFrameElement.prototype, "iframe");
+    }
+    if (typeof HTMLImageElement !== "undefined") {
+      hookPrototypeSrc(HTMLImageElement.prototype, "img");
+    }
   }
 
   private hookWindowOpen(): void {
@@ -434,12 +538,60 @@ export class NetworkInterceptor {
       if (url) {
         const urlStr = self.resolveUrl(url);
         if (self.isUrlBlockedSync(urlStr)) {
-          console.debug(`[Shield] Blocked popup window.open: ${urlStr}`);
           return null;
         }
       }
       return orig(url, target, features);
     };
+  }
+
+  /**
+   * Background monitor that fast-forwards and auto-skips any video ads
+   * and auto-dismisses promo dialogs on YouTube Music.
+   */
+  private startAdSkipper(): void {
+    if (typeof window === "undefined") return;
+
+    const skipAds = () => {
+      // 1. Check for ad-showing player state
+      const player = document.querySelector(".html5-video-player, #movie_player");
+      const video = document.querySelector("video") as HTMLVideoElement | null;
+
+      if (player && video) {
+        const isAdShowing = player.classList.contains("ad-showing") ||
+                            player.classList.contains("ad-interrupting") ||
+                            document.querySelector(".ytp-ad-player-overlay, .ytp-ad-module") !== null;
+
+        if (isAdShowing) {
+          // Fast-forward video ad to end
+          if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
+            video.currentTime = video.duration;
+          }
+
+          // Try clicking skip button
+          const skipBtn = document.querySelector<HTMLElement>(
+            ".ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button-slot button, .ytp-ad-overlay-close-button"
+          );
+          if (skipBtn) {
+            skipBtn.click();
+          }
+        }
+      }
+
+      // 2. Auto-dismiss "Still listening?" prompt and upsell dialogs
+      const dismissBtn = document.querySelector<HTMLElement>(
+        "ytmusic-you-there-renderer #button, ytmusic-mealbar-promo-renderer #dismiss-button, ytmusic-upsell-dialog-renderer #dismiss-button"
+      );
+      if (dismissBtn) {
+        dismissBtn.click();
+      }
+    };
+
+    const timer = setInterval(skipAds, 250);
+    if (typeof (timer as any)?.unref === "function") {
+      (timer as any).unref();
+    }
+    this.adSkipperInterval = timer as unknown as number;
   }
 
   public isInitialized(): boolean {

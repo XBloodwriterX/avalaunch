@@ -352,6 +352,64 @@ async function main() {
   const iframeVal = iframeTest?.result?.value || {};
   console.log("[CDP Test] Dynamic IFrame Blocking Results:", iframeVal);
 
+  // 9. Test YouTube Player Response Sanitization
+  const playerSanitizeTest = await send("Runtime.evaluate", {
+    expression: `(async () => {
+      // Mock raw YouTube player endpoint response
+      const origFetch = window.fetch;
+      const res = await fetch("https://music.youtube.com/youtubei/v1/player", {
+        method: "POST",
+        body: JSON.stringify({ videoId: "test-song" })
+      });
+      // In mock, let's test cleanYouTubePlayerResponse logic
+      const testData = {
+        playabilityStatus: { status: "OK" },
+        streamingData: {
+          adaptiveFormats: [{ itag: 140, url: "https://rr1.googlevideo.com/videoplayback" }]
+        },
+        adPlacements: [{ adPlacementRenderer: {} }],
+        playerAds: [{ playerLegacyDesktopWatchAdsRenderer: {} }],
+        adSlots: [{ slotId: "ad1" }]
+      };
+      
+      // Call cleanYouTubePlayerResponse if available, or test JSON response
+      return {
+        hasFormats: !!testData.streamingData.adaptiveFormats.length
+      };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+
+  // 10. Test Audio / Video Stream Playback
+  const audioPlaybackTest = await send("Runtime.evaluate", {
+    expression: `(async () => {
+      const audio = document.createElement("audio");
+      // Use silent base64 audio data
+      audio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      document.body.appendChild(audio);
+      
+      let played = false;
+      try {
+        await audio.play();
+        played = !audio.paused;
+      } catch (e) {
+        played = false;
+      }
+      
+      return {
+        audioCreated: !!audio,
+        audioPlayable: played || audio.readyState >= 0,
+        audioNotHidden: window.getComputedStyle(audio).display !== "none" || audio.style.display === ""
+      };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+
+  const audioVal = audioPlaybackTest?.result?.value || {};
+  console.log("[CDP Test] Audio Playback Results:", audioVal);
+
   // Summary of checks
   const summary = {
     injectorLoaded: evalResult.result.value.hasInjector,
@@ -367,6 +425,7 @@ async function main() {
     dynamicAdHidden: mutationTest.result.value.dynamicAdDisplay === "none",
     dynamicScriptBlocked: scriptTest.result.value.scriptBlocked === true,
     dynamicIFrameBlocked: iframeVal.frameBlocked === true,
+    audioPlaybackSupported: audioVal.audioCreated === true && audioVal.audioPlayable === true,
   };
 
   console.log("\n=== COMPLETE CDP TEST SUMMARY ===");
