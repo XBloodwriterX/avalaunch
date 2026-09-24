@@ -1,0 +1,5 @@
+[Adblock Plus 2.0]
+! Title: EasyList (Bundled Stub)
+! Homepage: https://easylist.to/
+||googleads.g.doubleclick.net^$third-party
+||pagead2.googlesyndication.com^$third-party

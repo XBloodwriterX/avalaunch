@@ -1,0 +1,5 @@
+[Adblock Plus 2.0]
+! Title: EasyPrivacy (Bundled Stub)
+! Homepage: https://easylist.to/
+||google-analytics.com^$third-party
+||analytics.google.com^$third-party

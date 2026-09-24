@@ -1,0 +1,30 @@
+{
+  "$schema": "./schema/avalaunch.schema.json",
+  "name": "Avalaunch",
+  "url": "https://music.youtube.com",
+  "window": {
+    "width": 1200,
+    "height": 780,
+    "min_width": 400,
+    "min_height": 300,
+    "resizable": true,
+    "fullscreen": false,
+    "title_bar": false,
+    "transparent": false
+  },
+  "shield": {
+    "enabled": true,
+    "filter_lists": [
+      "easylist",
+      "easyprivacy"
+    ],
+    "custom_filter_urls": [],
+    "cosmetic_filtering": true,
+    "scriptlets_enabled": true,
+    "custom_rules": []
+  },
+  "user_agent": {
+    "override": null,
+    "append_app_name": true
+  }
+}
