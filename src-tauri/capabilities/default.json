@@ -5,6 +5,14 @@
   "windows": [
     "main"
   ],
+  "remote": {
+    "urls": [
+      "https://*/*",
+      "https://*",
+      "http://*/*",
+      "http://*"
+    ]
+  },
   "permissions": [
     "core:default",
     "opener:default",

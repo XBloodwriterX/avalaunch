@@ -13,14 +13,14 @@ export const STYLE_ELEMENT_ID = "avalaunch-shield-cosmetic";
  */
 export async function invokeIPC<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (typeof window !== "undefined") {
+    if (window.__TAURI_INTERNALS__?.invoke) {
+      return window.__TAURI_INTERNALS__.invoke<T>(cmd, args);
+    }
     if (window.__TAURI__?.core?.invoke) {
       return window.__TAURI__.core.invoke<T>(cmd, args);
     }
     if (window.__TAURI__?.invoke) {
       return window.__TAURI__.invoke<T>(cmd, args);
-    }
-    if (window.__TAURI_INTERNALS__?.invoke) {
-      return window.__TAURI_INTERNALS__.invoke<T>(cmd, args);
     }
   }
   throw new Error(`[Avalaunch] Tauri IPC bridge not available for command: ${cmd}`);
@@ -42,14 +42,17 @@ export class CosmeticInjector {
   private initialized: boolean = false;
   private genericsEnabled: boolean = false;
   private isFlushing: boolean = false;
+  private lastLoadedUrl: string = "";
   private readonly maxCacheSize: number = 10000;
 
   /**
    * Initializes cosmetic filtering for the current page:
-   * 1. Fetches cosmetic resources from Tauri backend via IPC
-   * 2. Injects initial CSS hiding rules into <head> style tag
-   * 3. Executes anti-circumvention / ad-blocking scriptlets
-   * 4. If generic rules are enabled, starts MutationObserver for dynamic hiding
+   * 1. Prepares cosmetic <style> tag in document
+   * 2. Fetches cosmetic resources from Tauri backend via IPC
+   * 3. Injects initial CSS hiding rules into <head> style tag
+   * 4. Executes anti-circumvention / ad-blocking scriptlets
+   * 5. If generic rules are enabled, starts MutationObserver for dynamic hiding
+   * 6. Sets up SPA navigation listeners
    */
   public async init(): Promise<void> {
     if (this.initialized) {
@@ -60,7 +63,22 @@ export class CosmeticInjector {
     // Ensure style element is prepared in the document
     this.ensureStyleElement();
 
+    // Hook SPA navigation events
+    this.setupSpaNavigationHooks();
+
+    // Load cosmetic resources for current URL
+    await this.refreshCosmeticResources();
+  }
+
+  /**
+   * Refreshes cosmetic resources when navigating to a new URL.
+   */
+  public async refreshCosmeticResources(): Promise<void> {
     const pageUrl = typeof window !== "undefined" && window.location ? window.location.href : "";
+    if (pageUrl === this.lastLoadedUrl && this.injectedSelectors.size > 0) {
+      return;
+    }
+    this.lastLoadedUrl = pageUrl;
 
     try {
       // Fetch domain-specific cosmetic rules and scriptlets
@@ -185,6 +203,39 @@ export class CosmeticInjector {
 
     this.styleElement = style;
     return style;
+  }
+
+  /**
+   * Hooks Single Page Application navigation events (History API, hashchange, custom yt events).
+   */
+  private setupSpaNavigationHooks(): void {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+
+    const onNav = () => {
+      this.refreshCosmeticResources().catch(() => {});
+    };
+
+    window.addEventListener("popstate", onNav);
+    window.addEventListener("hashchange", onNav);
+    window.addEventListener("yt-navigate-finish", onNav);
+
+    // Monkey-patch history.pushState and history.replaceState
+    if (window.history) {
+      const origPush = window.history.pushState;
+      const origReplace = window.history.replaceState;
+
+      window.history.pushState = function (...args) {
+        const res = origPush.apply(this, args);
+        onNav();
+        return res;
+      };
+
+      window.history.replaceState = function (...args) {
+        const res = origReplace.apply(this, args);
+        onNav();
+        return res;
+      };
+    }
   }
 
   /**
@@ -442,6 +493,7 @@ export class CosmeticInjector {
     this.initialized = false;
     this.genericsEnabled = false;
     this.isFlushing = false;
+    this.lastLoadedUrl = "";
   }
 }
 

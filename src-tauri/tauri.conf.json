@@ -11,19 +11,7 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "label": "main",
-        "title": "Avalaunch",
-        "width": 1200,
-        "height": 780,
-        "minWidth": 400,
-        "minHeight": 300,
-        "resizable": true,
-        "fullscreen": false,
-        "url": "https://music.youtube.com"
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null,
       "capabilities": [

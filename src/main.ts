@@ -1,15 +1,19 @@
 /**
  * Avalaunch Frontend Runtime Initialization
- * Coordinates cosmetic filtering injection and frontend runtime setup.
+ * Coordinates network request interception and cosmetic filtering injection.
  * Injected as initialization_script or bundled as webview shell entry.
  */
 
 import { CosmeticInjector } from "./cosmetic-injector.ts";
+import { NetworkInterceptor } from "./network-interceptor.ts";
 
 export { CosmeticInjector, initCosmeticInjector, STYLE_ELEMENT_ID, invokeIPC } from "./cosmetic-injector.ts";
+export { NetworkInterceptor } from "./network-interceptor.ts";
+export { initServiceWorker } from "./service-worker.ts";
 export type * from "./types";
 
 let defaultInjector: CosmeticInjector | null = null;
+let defaultNetworkInterceptor: NetworkInterceptor | null = null;
 
 /**
  * Initializes frontend ad-blocking and cosmetic filtering runtime.
@@ -19,11 +23,19 @@ export function initFrontend(): CosmeticInjector {
     return defaultInjector;
   }
 
+  // 1. Initialize Network Interceptor immediately before any scripts run
+  if (!defaultNetworkInterceptor) {
+    defaultNetworkInterceptor = new NetworkInterceptor();
+    defaultNetworkInterceptor.init();
+  }
+
+  // 2. Initialize Cosmetic Injector
   const injector = new CosmeticInjector();
   defaultInjector = injector;
 
   if (typeof window !== "undefined") {
     window.__AVALAUNCH_INJECTOR__ = injector;
+    (window as any).__AVALAUNCH_NETWORK__ = defaultNetworkInterceptor;
   }
 
   const startInjector = () => {
