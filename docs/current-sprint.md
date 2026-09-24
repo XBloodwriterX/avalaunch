@@ -21,6 +21,7 @@
 | 5 | Implement Configuration System | bridge-dev | ✅ Completed | avalaunch.json schema parsing, multi-candidate path loader, graceful defaults |
 | 6 | Wire integration & build | bridge-dev / coordinator | ✅ Completed | Clean release build produced `target/release/avalaunch` (24MB) |
 | 7 | Test-drive music.youtube.com | coordinator | ✅ Completed | Verified YouTube Music ad blocking & audio stream playback via integration test suite |
+| 8 | Diagnose & Fix Ad-blocking via CDP | QA / Senior Rust Eng | ✅ Completed | Fixed window builder initialization script injection, remote URL capability permissions, implemented full frontend network interception (`fetch`, `XHR`, `sendBeacon`, dynamic `<script>` / `<iframe>` / `<img>`), added SPA navigation cosmetic rule refreshes, verified with CDP end-to-end test suite |
 
 ## Key Decisions This Sprint
 

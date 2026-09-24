@@ -17,13 +17,18 @@ This is the entry point for all project documentation. Use this file to navigate
 | [`shield-engine.md`](./shield-engine.md) | Ad-blocking engine integration details & concurrency model |
 | [`platform-interception.md`](./platform-interception.md) | Platform-specific request interception architecture |
 | [`filter-lists.md`](./filter-lists.md) | Filter list management, caching, and update lifecycle |
+| [`frontend-injector.md`](./frontend-injector.md) | Frontend cosmetic filtering, MutationObserver, scriptlets & SPA tracking |
 | [`configuration.md`](./configuration.md) | App configuration schema, options, and defaults |
+| [`packaging-and-distribution.md`](./packaging-and-distribution.md) | Packaging targets, build pipeline, runtime requirements, and distribution verification |
+| [`security-and-privacy.md`](./security-and-privacy.md) | Security model, sandboxing, network privacy & data isolation guarantees |
+| [`testing.md`](./testing.md) | Testing strategy, verification commands, assertions & CI troubleshooting |
 
 ## Decision Log
 
 | Document | Purpose |
 |----------|---------| 
 | [`decisions/001-build-from-scratch.md`](./decisions/001-build-from-scratch.md) | ADR: Build from scratch vs. fork Pake |
+| [`decisions/002-hybrid-network-cosmetic-interception.md`](./decisions/002-hybrid-network-cosmetic-interception.md) | ADR: Hybrid network and cosmetic interception architecture |
 
 ## How to Use This Index
 
